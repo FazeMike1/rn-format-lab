@@ -1,0 +1,6 @@
+{
+  "name": "rn-format-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated lab reproducing the react-native format-report cross-PR chain. Fictional canary only."
+}

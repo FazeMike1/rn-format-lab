@@ -1,0 +1,35 @@
+name: Build
+
+# Mirrors react-native's test-all.yml secret exposure: a job that exposes a secret
+# as JOB-LEVEL env on pull_request with NO push/fork/event_name guard.
+# GitHub withholds secrets from FORK PRs (so PR A's build sees an empty canary) but
+# provides them to INTERNAL-branch PRs (so PR B's build — after the malicious commit —
+# runs ci-target.js WITH the canary).
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      LAB_CANARY: ${{ secrets.LAB_CANARY }} # job-level; readable by ANY code in this job
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run CI target (the file PR B modifies / the suggestion hijacks)
+        run: node ./scripts/ci-target.js
+      - name: Upload canary proof (only exists if injected code ran)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-proof
+          path: canary-proof.txt
+          if-no-files-found: ignore

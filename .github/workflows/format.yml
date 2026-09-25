@@ -1,0 +1,45 @@
+name: Format
+
+# Mirrors react-native's format.yml trust model: runs on PRs (incl. forks),
+# checks out the PR HEAD (attacker code), runs an attacker-controllable step,
+# then uploads the (attacker-controlled) format-results artifact.
+on:
+  pull_request:
+
+permissions:
+  contents: read # fork PRs get read-only token + NO secrets (GitHub default)
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head (attacker code)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Initialize report (trusted context -> own PR number)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p .format-results
+          node -e "const{EVENT_NAME,HEAD_SHA,PR_NUMBER}=process.env;require('fs').writeFileSync('.format-results/metadata.json',JSON.stringify({EVENT_NAME,HEAD_SHA,PR_NUMBER}))"
+      - name: Check formatting (ATTACKER-CONTROLLABLE — runs ./scripts/format-step.js from PR head)
+        id: format
+        continue-on-error: true
+        run: node ./scripts/format-step.js
+      - name: Upload formatting report
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: format-results
+          path: .format-results/
+          retention-days: 1
+      # Make the run conclude "failure" when a patch exists (reporter only posts on failure)
+      - name: Fail if patch produced
+        if: steps.format.outcome == 'failure'
+        run: exit 1
