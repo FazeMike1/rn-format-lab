@@ -1,0 +1,45 @@
+name: CT Comment
+
+# Models the rocksdb clang-tidy-comment.yml CONSUMER: privileged workflow_run that
+# downloads the artifact and posts an issue comment to the PR named in pr_number.txt,
+# with NO head-sha / association validation (trusts the artifact).
+on:
+  workflow_run:
+    workflows: [CT]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download CT artifact (attacker-controlled)
+        id: dl
+        uses: actions/download-artifact@v4
+        with:
+          name: ct-result
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: _art
+        continue-on-error: true
+      - name: Post comment
+        if: steps.dl.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('_art/pr_number.txt')) { core.info('no pr_number'); return; }
+            const prNumber = parseInt(fs.readFileSync('_art/pr_number.txt', 'utf8').trim(), 10);
+            const body = fs.existsSync('_art/ct-comment.md')
+              ? fs.readFileSync('_art/ct-comment.md', 'utf8')
+              : '(no findings)';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber, // <-- trusted verbatim from attacker artifact
+              body,                    // <-- attacker-controlled body
+            });
