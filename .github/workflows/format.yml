@@ -39,6 +39,7 @@ jobs:
           name: format-results
           path: .format-results/
           retention-days: 1
+          include-hidden-files: true # .format-results is a dot-dir (hidden)
       # Make the run conclude "failure" when a patch exists (reporter only posts on failure)
       - name: Fail if patch produced
         if: steps.format.outcome == 'failure'
