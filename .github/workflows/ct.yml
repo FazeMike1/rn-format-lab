@@ -1,0 +1,39 @@
+name: CT
+
+# Models the rocksdb clang-tidy PRODUCER pattern: runs on PRs (incl forks),
+# runs an attacker-controllable "configure/build" step (analog of `cmake configure`
+# executing the fork's CMakeLists) BEFORE a TRUSTED one-shot "Save PR number", then
+# uploads the artifact (pr_number.txt + ct-comment.md).
+on:
+  pull_request:
+
+permissions:
+  contents: read # fork PRs: read-only token, no secrets
+
+jobs:
+  ct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # attacker code
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Configure (attacker-controllable — analog of cmake configure)
+        run: bash ./scripts/ct-configure.sh
+      - name: Run linter (produces comment body)
+        run: node ./scripts/ct-lint.js > ct-comment.md
+      - name: Save PR number (TRUSTED one-shot, AFTER attacker code)
+        if: always()
+        run: echo "${{ github.event.pull_request.number }}" > pr_number.txt
+      - name: Upload CT result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ct-result
+          path: |
+            ct-comment.md
+            pr_number.txt
+          include-hidden-files: true
+          retention-days: 1
