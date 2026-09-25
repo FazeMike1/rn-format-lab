@@ -1,0 +1,46 @@
+name: MP Comment
+
+# Models the pyrefly mypy_primer_comment CONSUMER: privileged workflow_run that reads
+# pr_number.txt (no validation) and wraps the artifact's fulldiff.txt inside a
+# ```diff fence WITHOUT sanitizing ``` — enabling fence-breakout markdown injection.
+on:
+  workflow_run:
+    workflows: [MP]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download diffs (attacker-controlled artifact)
+        id: dl
+        uses: actions/download-artifact@v4
+        with:
+          name: mp-diffs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: _art
+        continue-on-error: true
+      - name: Post comment
+        if: steps.dl.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('_art/pr_number.txt')) { core.info('no pr_number'); return; }
+            const prNumber = parseInt(fs.readFileSync('_art/pr_number.txt', 'utf8').trim(), 10);
+            const data = fs.existsSync('_art/fulldiff.txt')
+              ? fs.readFileSync('_art/fulldiff.txt', 'utf8')
+              : '';
+            // Mirrors pyrefly's reporter: raw data inside a ```diff fence, NO ``` sanitization.
+            const body = 'Diff from mypy_primer, showing the effect of this PR:\n```diff\n' + data + '\n```';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber, // trusted verbatim from attacker artifact
+              body,
+            });

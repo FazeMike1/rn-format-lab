@@ -1,0 +1,33 @@
+name: MP
+
+# Models the pyrefly mypy_primer PRODUCER: runs on PRs (incl forks), runs an
+# attacker-controllable build/run step (analog of building & running the PR's pyrefly)
+# BEFORE a TRUSTED one-shot "Save PR number", then uploads fulldiff.txt + pr_number.txt.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # attacker code
+      - name: Build & run (attacker-controllable — analog of building the PR's pyrefly)
+        run: bash ./scripts/mp-run.sh
+      - name: Save PR number (TRUSTED one-shot, AFTER attacker code)
+        if: always()
+        run: echo "${{ github.event.pull_request.number }}" > pr_number.txt
+      - name: Upload diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mp-diffs
+          path: |
+            fulldiff.txt
+            pr_number.txt
+          include-hidden-files: true
+          retention-days: 1
